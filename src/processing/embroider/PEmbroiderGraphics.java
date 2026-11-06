@@ -4513,6 +4513,22 @@ public class PEmbroiderGraphics {
 		PEmbroiderWriter.write(path, polylines, colors, width, height, NO_CONNECT);
 	}
 
+	/**
+	 * Set Brother PES exporter version (1 or 6)
+	 * @param version 1 for PES v1 (#PES0001), 6 for PES v6 (#PES0060)
+	 */
+	public void setPESVersion(int version) {
+		PEmbroiderWriter.PES.VERSION = version;
+	}
+
+	/**
+	 * Set whether Brother PES exporter outputs truncated header
+	 * @param truncated true to truncate header
+	 */
+	public void setPESTruncated(boolean truncated) {
+		PEmbroiderWriter.PES.TRUNCATED = truncated;
+	}
+
 
 	/**
 	 * Double the number of vertices in the polyline by spliting every segment by half

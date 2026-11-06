@@ -40,6 +40,109 @@ public class PEmbroiderWriter {
 	public static String TITLE = null;
 	public static String PATH = null;
 
+	public static byte[] generate_pec_graphics(ArrayList<PVector> stitches, ArrayList<Integer> colors, Integer targetColor, ArrayList<Boolean> jumps) {
+		byte[] bitmap = new byte[228];
+		if (stitches == null || stitches.size() < 2) {
+			return bitmap;
+		}
+
+		float minX = Float.POSITIVE_INFINITY;
+		float minY = Float.POSITIVE_INFINITY;
+		float maxX = Float.NEGATIVE_INFINITY;
+		float maxY = Float.NEGATIVE_INFINITY;
+		int count = 0;
+
+		for (int i = 0; i < stitches.size(); i++) {
+			if (targetColor == null || (colors != null && i < colors.size() && colors.get(i).equals(targetColor))) {
+				PVector pt = stitches.get(i);
+				if (pt.x < minX) minX = pt.x;
+				if (pt.y < minY) minY = pt.y;
+				if (pt.x > maxX) maxX = pt.x;
+				if (pt.y > maxY) maxY = pt.y;
+				count++;
+			}
+		}
+
+		if (count < 2 || minX == Float.POSITIVE_INFINITY) {
+			return bitmap;
+		}
+
+		float spanX = maxX - minX;
+		float spanY = maxY - minY;
+		float scale = 1.0f;
+		if (spanX > 0 && spanY > 0) {
+			scale = Math.min(42.0f / spanX, 32.0f / spanY);
+		} else if (spanX > 0) {
+			scale = 42.0f / spanX;
+		} else if (spanY > 0) {
+			scale = 32.0f / spanY;
+		}
+
+		float centerX = (minX + maxX) / 2.0f;
+		float centerY = (minY + maxY) / 2.0f;
+		float thumbCenterX = 24.0f;
+		float thumbCenterY = 19.0f;
+
+		for (int i = 0; i < stitches.size() - 1; i++) {
+			if (jumps != null && i < jumps.size() && Boolean.TRUE.equals(jumps.get(i))) {
+				continue;
+			}
+			if (targetColor != null && colors != null) {
+				if (i >= colors.size() || !colors.get(i).equals(targetColor)) {
+					continue;
+				}
+			}
+			if (colors != null && i < colors.size() - 1 && !colors.get(i).equals(colors.get(i + 1))) {
+				continue;
+			}
+
+			PVector p0 = stitches.get(i);
+			PVector p1 = stitches.get(i + 1);
+
+			int x0 = Math.round(thumbCenterX + (p0.x - centerX) * scale);
+			int y0 = Math.round(thumbCenterY + (p0.y - centerY) * scale);
+			int x1 = Math.round(thumbCenterX + (p1.x - centerX) * scale);
+			int y1 = Math.round(thumbCenterY + (p1.y - centerY) * scale);
+
+			x0 = Math.max(0, Math.min(47, x0));
+			y0 = Math.max(0, Math.min(37, y0));
+			x1 = Math.max(0, Math.min(47, x1));
+			y1 = Math.max(0, Math.min(37, y1));
+
+			drawBresenham(bitmap, x0, y0, x1, y1);
+		}
+
+		return bitmap;
+	}
+
+	public static void drawBresenham(byte[] bitmap, int x0, int y0, int x1, int y1) {
+		int dx = Math.abs(x1 - x0);
+		int dy = Math.abs(y1 - y0);
+		int sx = x0 < x1 ? 1 : -1;
+		int sy = y0 < y1 ? 1 : -1;
+		int err = dx - dy;
+
+		while (true) {
+			if (x0 >= 0 && x0 < 48 && y0 >= 0 && y0 < 38) {
+				int byteIndex = y0 * 6 + (x0 / 8);
+				int bitIndex = 7 - (x0 % 8);
+				bitmap[byteIndex] |= (byte) (1 << bitIndex);
+			}
+			if (x0 == x1 && y0 == y1) {
+				break;
+			}
+			int e2 = 2 * err;
+			if (e2 > -dy) {
+				err -= dy;
+				x0 += sx;
+			}
+			if (e2 < dx) {
+				err += dx;
+				y0 += sy;
+			}
+		}
+	}
+
 	public static class DST{
 
 		public static final String PROP_EXTENDED_HEADER = "extended_header";
@@ -729,12 +832,11 @@ public class PEmbroiderWriter {
 
 			    	Object[] data = write_pec_header();
 			        write_pec_block();
-			        write_pec_graphics();
-			        write_pec_graphics();
-			        for (int i = 0; i < colors.size(); i++) {
-			        	if (i > 0 && !colors.get(i-1).equals(colors.get(i))) {
-			        		write_pec_graphics();
-			        	}
+			        @SuppressWarnings("unchecked")
+			        ArrayList<Integer> palette = (ArrayList<Integer>) data[1];
+			        write(generate_pec_graphics(stitches, colors, null, jumps));
+			        for (int i = 0; i < palette.size(); i++) {
+			        	write(generate_pec_graphics(stitches, colors, palette.get(i), jumps));
 			        }
 			        
 			        return data;
@@ -834,46 +936,7 @@ public class PEmbroiderWriter {
 			        writeSpaceHolder24LE(stitch_block_length);
 			    }
 			    void write_pec_graphics() throws IOException {
-			        write(new byte[]{
-			                (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-			                (byte) 0xF0, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x0F,
-			                (byte) 0x08, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x10,
-			                (byte) 0x04, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x20,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x04, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x20,
-			                (byte) 0x08, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x10,
-			                (byte) 0xF0, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x0F,
-			                (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00
-			        });
+			        write(generate_pec_graphics(stitches, colors, null, jumps));
 			    }
 
 			    public int encode_long_form(int value) {
@@ -1079,7 +1142,8 @@ public class PEmbroiderWriter {
 
 			        float height = bottom - top;
 			        float width = right - left;
-			        int hoopHeight = 1800, hoopWidth = 1300;
+			        int hoopHeight = (height > 1000 || width > 1000) ? 1800 : 1000;
+			        int hoopWidth = (height > 1000 || width > 1000) ? 1300 : 1000;
 			        writeInt16LE(0);  //writeInt16LE((int) left);
 			        writeInt16LE(0);  //writeInt16LE((int) top);
 			        writeInt16LE(0);  //writeInt16LE((int) right);
@@ -1112,7 +1176,10 @@ public class PEmbroiderWriter {
 			        return tell();
 			    }
 			    public void write_pes_header_v6(int distinctBlockObjects) throws IOException {
-			        writeInt16LE(0x01); // 0 = 100x100 else 130x180 or above
+			        float width = bounds[2] - bounds[0];
+			        float height = bounds[3] - bounds[1];
+			        boolean largeHoop = (width > 1000 || height > 1000);
+			        writeInt16LE(largeHoop ? 0x01 : 0x00); // 0 = 100x100 else 130x180 or above
 			        writeInt8(0x30);
 			        writeInt8(0x32);
 			        String name = title;
@@ -1127,8 +1194,8 @@ public class PEmbroiderWriter {
 
 			        writeInt16LE(0);//boolean designPageIsCustom = (readInt16LE() == 1);
 
-			        writeInt16LE(0x64); //hoopwidth
-			        writeInt16LE(0x64); //hoopheight
+			        writeInt16LE(largeHoop ? 130 : 100); //hoopwidth
+			        writeInt16LE(largeHoop ? 180 : 100); //hoopheight
 			        writeInt16LE(0);// 1 means "UseExistingDesignArea" 0 means "Design Page Area"        
 
 			        writeInt16LE(0xC8);//int designWidth = readInt16LE();
@@ -1160,13 +1227,12 @@ public class PEmbroiderWriter {
 			        writeInt16LE(0);//int numberOfMotifPatterns = readInt16LE();
 			        writeInt16LE(0);//int featherPatternCount = readInt16LE();
 			        ArrayList<Integer> chart = new ArrayList<Integer>();
-					int color_count = 1;
-					for (int i = 1; i < colors.size(); i++) {
-						if (!colors.get(i).equals(colors.get(i-1))) {
-							color_count ++;
-						}
-					}
-			        writeInt16LE(color_count);//int numberOfColors = readInt16LE();
+			        for (int i = 0; i < colors.size(); i++) {
+			            if (i == 0 || (!colors.get(i).equals(colors.get(i - 1)))) {
+			                chart.add(colors.get(i));
+			            }
+			        }
+			        writeInt16LE(chart.size());//int numberOfColors = readInt16LE();
 			        for (Integer t : chart) {
 			            write_pes_thread(t);
 			        }
@@ -1645,9 +1711,12 @@ public class PEmbroiderWriter {
 				}
 			    public void write_pec() throws IOException {
 
-			        write_pec_header();
+			        ArrayList<Integer> palette = write_pec_header();
 			        write_pec_block();
-			        write_pec_graphics();
+			        write(generate_pec_graphics(stitches, colors, null, null));
+			        for (int i = 0; i < palette.size(); i++) {
+			        	write(generate_pec_graphics(stitches, colors, palette.get(i), null));
+			        }
 			        stream.close();
 			    }
 			    public int find_color(int color) {
@@ -1677,7 +1746,7 @@ public class PEmbroiderWriter {
 			    	return mi+1;
 			    }
 			    
-			    public void write_pec_header() throws IOException {
+			    public ArrayList<Integer> write_pec_header() throws IOException {
 			        String name = title;
 			        name = name.substring(0, 8);
 			        write(String.format(Locale.ENGLISH, "LA:%-16s\r", name).getBytes());
@@ -1718,6 +1787,7 @@ public class PEmbroiderWriter {
 			        for (int i = 0; i < (463-palette.size()); i++) {
 			            writeInt8(0x20);
 			        }
+			        return palette;
 			    }
 			    void write_pec_block() throws IOException {
 			        int width = (int) Math.rint(bounds[2]-bounds[0]);
@@ -1748,46 +1818,7 @@ public class PEmbroiderWriter {
 			        writeSpaceHolder24LE(stitch_block_length);
 			    }
 			    void write_pec_graphics() throws IOException {
-			        write(new byte[]{
-			                (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-			                (byte) 0xF0, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x0F,
-			                (byte) 0x08, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x10,
-			                (byte) 0x04, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x20,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x40,
-			                (byte) 0x04, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x20,
-			                (byte) 0x08, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x10,
-			                (byte) 0xF0, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x0F,
-			                (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00
-			        });
+			        write(generate_pec_graphics(stitches, colors, null, null));
 			    }
 
 			    public int encode_long_form(int value) {

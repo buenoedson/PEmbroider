@@ -2,3 +2,26 @@ bin
 tmp
 .DS_Store
 **/.DS_Store
+
+# Security & LGPD Compliance
+.env*
+*.pem
+*.key
+*.pfx
+secrets.*
+credentials.*
+*.sql
+*.sqlite
+*.db
+*.bak
+*.dump
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.pdf
+
+# Logs (exceto HISTORICO_SESSAO.md)
+*.log
+logs/*
+!logs/HISTORICO_SESSAO.md
